@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Random Panda Fun</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2.5em;
+        }
+        
+        .panda {
+            font-size: 100px;
+            margin: 30px 0;
+            animation: bounce 1s infinite;
+        }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        
+        .random-text {
+            background: #f0f0f0;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-size: 18px;
+            color: #555;
+            line-height: 1.6;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 16px;
+            border-radius: 25px;
+            cursor: pointer;
+            margin: 10px 5px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:active {
+            transform: scale(0.95);
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #eee;
+        }
+        
+        .stat-box {
+            flex: 1;
+            padding: 15px;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            color: #999;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐼 Panda Paradise 🐼</h1>
+        
+        <div class="panda" id="pandaEmoji">🐼</div>
+        
+        <div class="random-text" id="randomText">
+            Click a button to see something fun!
+        </div>
+        
+        <button onclick="showRandomFact()">Random Fact</button>
+        <button onclick="showRandomQuote()">Random Quote</button>
+        <button onclick="changeColor()">Change Color</button>
+        <button onclick="showRandomNumber()">Lucky Number</button>
+        
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-number" id="clickCount">0</div>
+                <div class="stat-label">Total Clicks</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-number" id="randomNumber">🎲</div>
+                <div class="stat-label">Random Roll</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-number" id="timestamp">00:00</div>
+                <div class="stat-label">Time</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let clickCount = 0;
+        
+        const facts = [
+            "Pandas eat up to 14 hours a day! 🍃",
+            "A panda's throat has a special lining to protect it from splinters.",
+            "Pandas have been a symbol of peace and friendship for centuries.",
+            "Pandas are actually solitary creatures despite their cute appearance.",
+            "A newborn panda is smaller than a human baby!",
+            "Pandas have excellent memories and can remember their trainers.",
+            "Giant pandas have lived on Earth for millions of years."
+        ];
+        
+        const quotes = [
+            '"Be as gentle as a panda, strong as a bamboo." - Unknown',
+            '"The greatest wealth is health." - Virgil',
+            '"Life is like eating bamboo - one piece at a time." - Panda Wisdom',
+            '"In the midst of chaos, there is also opportunity." - Confucius',
+            '"Be yourself; everyone else is already taken." - Oscar Wilde'
+        ];
+        
+        const colors = [
+            '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
+            '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B88B', '#52B788'
+        ];
+        
+        function showRandomFact() {
+            const fact = facts[Math.floor(Math.random() * facts.length)];
+            document.getElementById('randomText').textContent = fact;
+            updateClicks();
+        }
+        
+        function showRandomQuote() {
+            const quote = quotes[Math.floor(Math.random() * quotes.length)];
+            document.getElementById('randomText').textContent = quote;
+            updateClicks();
+        }
+        
+        function changeColor() {
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            document.body.style.background = `linear-gradient(135deg, ${color} 0%, ${shadeColor(color, -20)} 100%)`;
+            updateClicks();
+        }
+        
+        function showRandomNumber() {
+            const randomNum = Math.floor(Math.random() * 1000) + 1;
+            document.getElementById('randomText').textContent = `🎲 Your lucky number is: ${randomNum}`;
+            document.getElementById('randomNumber').textContent = randomNum;
+            updateClicks();
+        }
+        
+        function updateClicks() {
+            clickCount++;
+            document.getElementById('clickCount').textContent = clickCount;
+        }
+        
+        function shadeColor(color, percent) {
+            let R = parseInt(color.substring(1, 3), 16);
+            let G = parseInt(color.substring(3, 5), 16);
+            let B = parseInt(color.substring(5, 7), 16);
+            
+            R = parseInt(R * (100 + percent) / 100);
+            G = parseInt(G * (100 + percent) / 100);
+            B = parseInt(B * (100 + percent) / 100);
+            
+            R = (R < 255) ? R : 255;
+            G = (G < 255) ? G : 255;
+            B = (B < 255) ? B : 255;
+            
+            let RR = ((R.toString(16).length == 1) ? "0" + R.toString(16) : R.toString(16));
+            let GG = ((G.toString(16).length == 1) ? "0" + G.toString(16) : G.toString(16));
+            let BB = ((B.toString(16).length == 1) ? "0" + B.toString(16) : B.toString(16));
+            
+            return "#" + RR + GG + BB;
+        }
+        
+        function updateTime() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            document.getElementById('timestamp').textContent = `${hours}:${minutes}`;
+        }
+        
+        // Update time every minute
+        setInterval(updateTime, 60000);
+        updateTime();
+    </script>
+</body>
+</html>

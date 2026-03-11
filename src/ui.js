@@ -30,12 +30,18 @@ function printHelp() {
   console.log('');
   console.log(chalk.cyan.bold('  Commands:'));
   console.log(chalk.gray('  ─────────────────────────────────'));
-  console.log(chalk.yellow('  /help     ') + chalk.white(' Show this help message'));
-  console.log(chalk.yellow('  /config   ') + chalk.white(' Reconfigure credentials'));
-  console.log(chalk.yellow('  /clear    ') + chalk.white(' Clear conversation history'));
-  console.log(chalk.yellow('  /history  ') + chalk.white(' Show conversation history'));
-  console.log(chalk.yellow('  /model    ') + chalk.white(' Show current model info'));
-  console.log(chalk.yellow('  /exit     ') + chalk.white(' Exit the CLI'));
+  console.log(chalk.yellow('  /help        ') + chalk.white(' Show this help message'));
+  console.log(chalk.yellow('  /config      ') + chalk.white(' Reconfigure credentials'));
+  console.log(chalk.yellow('  /clear       ') + chalk.white(' Clear conversation history'));
+  console.log(chalk.yellow('  /history     ') + chalk.white(' Show conversation history'));
+  console.log(chalk.yellow('  /model       ') + chalk.white(' Show current model info'));
+  console.log(chalk.yellow('  /thinking N  ') + chalk.white(' Set thinking depth (e.g. /thinking 3)'));
+  console.log(chalk.yellow('  /commit      ') + chalk.white(' Manually commit pending changes'));
+  console.log(chalk.yellow('  /exit        ') + chalk.white(' Exit the CLI'));
+  console.log('');
+  console.log(chalk.cyan.bold('  Shortcuts:'));
+  console.log(chalk.gray('  ─────────────────────────────────'));
+  console.log(chalk.yellow('  Ctrl+G       ') + chalk.white(' Accept & commit current changes'));
   console.log('');
 }
 
@@ -102,6 +108,31 @@ function printInfo(message) {
   console.log(chalk.cyan('  ℹ ') + chalk.white(message));
 }
 
+function printThinkingHeader(round, total) {
+  console.log('');
+  console.log(chalk.yellow('  ┌─ 🧠 ') + chalk.yellow.bold(`Thinking (round ${round}/${total})`) + chalk.yellow(' ─────────────────────'));
+}
+
+function printThinkingContent(text) {
+  const lines = text.split('\n');
+  for (const line of lines) {
+    console.log(chalk.yellow('  │ ') + chalk.gray(line));
+  }
+}
+
+function printThinkingEnd() {
+  console.log(chalk.yellow('  └──────────────────────────────────────────'));
+  console.log('');
+}
+
+function printThinkingStatus(depth) {
+  if (depth > 0) {
+    console.log(chalk.yellow(`  🧠 Deep thinking enabled — ${depth} rounds`));
+  } else {
+    console.log(chalk.gray('  🧠 Deep thinking disabled'));
+  }
+}
+
 module.exports = {
   printBanner,
   printHelp,
@@ -113,4 +144,8 @@ module.exports = {
   printAssistantEnd,
   printError,
   printInfo,
+  printThinkingHeader,
+  printThinkingContent,
+  printThinkingEnd,
+  printThinkingStatus,
 };

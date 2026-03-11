@@ -1,15 +1,17 @@
 const fs = require('fs');
 const path = require('path');
 const chalk = require('chalk');
+const { execSync } = require('child_process');
 
 const cwd = process.cwd();
 
 function getSystemPrompt() {
   return `You are Super Thinking Agent, a powerful AI coding assistant running inside the user's terminal.
-You have full access to the user's filesystem with administrator privileges.
+You have FULL administrator access to the user's computer. You can run ANY command, install software, manage git, and do anything the user asks.
 
 Current working directory: ${cwd}
 Operating System: ${process.platform} (${process.arch})
+Shell: ${process.platform === 'win32' ? 'cmd.exe / powershell' : 'bash'}
 Date: ${new Date().toLocaleDateString()}
 
 You have the following tools available:
@@ -18,6 +20,7 @@ You have the following tools available:
 - create_file: Create a new file (any extension) with content, or overwrite an existing file
 - edit_file: Edit an existing file by replacing old text with new text
 - delete_file: Delete any file or empty folder
+- run_command: Execute ANY shell command (git, npm, pip, curl, etc). Use this for everything you can't do with other tools.
 
 IMPORTANT RULES:
 1. When the user asks about files, ALWAYS start by listing the ROOT working directory "." FIRST, then explore subdirectories. Never skip the root.
@@ -25,7 +28,11 @@ IMPORTANT RULES:
 3. If you don't find something in the first directory, keep searching subdirectories until you find it or exhaust all options.
 4. When the user asks you to look at files, read code, list directories, or delete things — USE the tools. Don't guess file contents.
 5. Always confirm before deleting files by telling the user what you're about to delete, unless they explicitly told you to delete it.
-6. NEVER say "I can't find it, can you tell me the path?" — instead, search harder.`;
+6. NEVER say "I can't find it, can you tell me the path?" — instead, search harder.
+7. NEVER say "I don't have a tool for that" — use run_command to do ANYTHING. You have full system access.
+8. For git operations (log, status, diff, revert, etc) — use run_command.
+9. For installing packages (npm, pip, choco, etc) — use run_command.
+10. Every file change you make is automatically committed to git. If the user wants to undo, use run_command with git reset.`;
 }
 
 const toolDefinitions = [
@@ -113,7 +120,7 @@ const toolDefinitions = [
     type: 'function',
     function: {
       name: 'delete_file',
-      description: 'Delete a file or empty directory at the given path. Use with caution.',
+      description: 'Delete a file or directory at the given path. Use with caution.',
       parameters: {
         type: 'object',
         properties: {
@@ -126,7 +133,31 @@ const toolDefinitions = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'run_command',
+      description: 'Execute any shell command on the user\'s computer. Use for: git commands (log, status, diff, reset, push, pull), installing packages (npm install, pip install), running scripts, system commands, and anything else. You have full admin access.',
+      parameters: {
+        type: 'object',
+        properties: {
+          command: {
+            type: 'string',
+            description: 'The shell command to execute (e.g. "git log --oneline -10", "npm install express", "dir", "python script.py").',
+          },
+        },
+        required: ['command'],
+      },
+    },
+  },
 ];
+
+// Track which tools modify files (for auto-commit)
+const MODIFYING_TOOLS = new Set(['create_file', 'edit_file', 'delete_file']);
+
+function isModifyingTool(name) {
+  return MODIFYING_TOOLS.has(name);
+}
 
 function resolvePath(p) {
   if (path.isAbsolute(p)) return p;
@@ -145,6 +176,8 @@ function executeTool(name, args) {
       return editFile(args.file_path, args.old_text, args.new_text);
     case 'delete_file':
       return deleteFile(args.file_path);
+    case 'run_command':
+      return runCommand(args.command);
     default:
       return { error: `Unknown tool: ${name}` };
   }
@@ -254,6 +287,26 @@ function deleteFile(filePath) {
   }
 }
 
+function runCommand(command) {
+  try {
+    const output = execSync(command, {
+      cwd,
+      encoding: 'utf-8',
+      timeout: 60000,
+      maxBuffer: 1024 * 1024 * 5,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return { success: true, output: output.trim() || '(no output)' };
+  } catch (err) {
+    return {
+      success: false,
+      exitCode: err.status,
+      output: (err.stdout || '').trim(),
+      error: (err.stderr || err.message || '').trim(),
+    };
+  }
+}
+
 function formatSize(bytes) {
   if (bytes === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -262,10 +315,17 @@ function formatSize(bytes) {
 }
 
 function printToolCall(name, args) {
-  const icons = { list_files: '📂', read_file: '📄', create_file: '✏️', edit_file: '📝', delete_file: '🗑️' };
+  const icons = { list_files: '📂', read_file: '📄', create_file: '✏️', edit_file: '📝', delete_file: '🗑️', run_command: '⚡' };
   const icon = icons[name] || '🔧';
-  const argStr = Object.values(args).join(', ');
+  let argStr;
+  if (name === 'run_command') {
+    argStr = args.command;
+  } else if (name === 'create_file') {
+    argStr = args.file_path;
+  } else {
+    argStr = Object.values(args).join(', ');
+  }
   console.log(chalk.gray(`  ${icon} `) + chalk.yellow(`${name}`) + chalk.gray(`(${argStr})`));
 }
 
-module.exports = { getSystemPrompt, toolDefinitions, executeTool, printToolCall };
+module.exports = { getSystemPrompt, toolDefinitions, executeTool, printToolCall, isModifyingTool };
