@@ -1,5 +1,4 @@
 const Conf = require('conf');
-const inquirer = require('inquirer');
 const chalk = require('chalk');
 
 const config = new Conf({ projectName: 'super-thinking-agent' });
@@ -10,7 +9,11 @@ const CONFIG_KEYS = {
   MODEL: 'model',
 };
 
-async function setupCredentials(force = false) {
+/**
+ * Ask a question using a provided askFn.
+ * askFn(prompt) => Promise<string>
+ */
+async function setupCredentials(force = false, askFn = null) {
   const existing = {
     baseUrl: config.get(CONFIG_KEYS.BASE_URL),
     apiKey: config.get(CONFIG_KEYS.API_KEY),
@@ -26,44 +29,47 @@ async function setupCredentials(force = false) {
   console.log(chalk.gray('  ─────────────────────────────────'));
   console.log('');
 
-  const answers = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'baseUrl',
-      message: chalk.white('Base URL:'),
-      default: existing.baseUrl || 'https://api.openai.com/v1',
-      validate: (val) => (val.trim() ? true : 'Base URL is required.'),
-    },
-    {
-      type: 'password',
-      name: 'apiKey',
-      message: chalk.white('API Key:'),
-      mask: '•',
-      default: existing.apiKey,
-      validate: (val) => (val.trim() ? true : 'API Key is required.'),
-    },
-    {
-      type: 'input',
-      name: 'model',
-      message: chalk.white('Model:'),
-      default: existing.model || 'gpt-4o',
-      validate: (val) => (val.trim() ? true : 'Model name is required.'),
-    },
-  ]);
+  // If no askFn provided (first run, no rl yet), use basic stdin
+  if (!askFn) {
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    askFn = (prompt) => new Promise((resolve) => rl.question(prompt, resolve));
 
-  config.set(CONFIG_KEYS.BASE_URL, answers.baseUrl.trim());
-  config.set(CONFIG_KEYS.API_KEY, answers.apiKey.trim());
-  config.set(CONFIG_KEYS.MODEL, answers.model.trim());
+    const result = await doPrompts(askFn, existing);
+
+    rl.close();
+    return result;
+  }
+
+  return doPrompts(askFn, existing);
+}
+
+async function doPrompts(askFn, existing) {
+  const defUrl = existing.baseUrl || 'https://api.openai.com/v1';
+  const defModel = existing.model || 'gpt-4o';
+
+  const baseUrl = await askFn(chalk.white('  Base URL') + chalk.gray(` (${defUrl}): `));
+  const apiKey = await askFn(chalk.white('  API Key') + chalk.gray(existing.apiKey ? ` (${existing.apiKey.slice(0, 8)}•••): ` : ': '));
+  const model = await askFn(chalk.white('  Model') + chalk.gray(` (${defModel}): `));
+
+  const finalUrl = baseUrl.trim() || defUrl;
+  const finalKey = apiKey.trim() || existing.apiKey || '';
+  const finalModel = model.trim() || defModel;
+
+  if (!finalKey) {
+    console.log(chalk.red('  ✖ API Key is required.'));
+    return existing;
+  }
+
+  config.set(CONFIG_KEYS.BASE_URL, finalUrl);
+  config.set(CONFIG_KEYS.API_KEY, finalKey);
+  config.set(CONFIG_KEYS.MODEL, finalModel);
 
   console.log('');
   console.log(chalk.green('  ✔ Credentials saved successfully!'));
   console.log('');
 
-  return {
-    baseUrl: answers.baseUrl.trim(),
-    apiKey: answers.apiKey.trim(),
-    model: answers.model.trim(),
-  };
+  return { baseUrl: finalUrl, apiKey: finalKey, model: finalModel };
 }
 
 function getCredentials() {

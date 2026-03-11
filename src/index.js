@@ -29,6 +29,7 @@ let credentials = null;
 let isStreaming = false;
 let pendingChanges = false;
 let thinkingDepth = 0; // 0 = off, 1+ = number of thinking rounds
+let inputPaused = false; // blocks stdin handler during config prompts
 
 async function main() {
   printBanner();
@@ -58,6 +59,9 @@ async function main() {
     process.stdin.resume();
 
     process.stdin.on('data', (key) => {
+      // Skip when config/other prompts are active
+      if (inputPaused) return;
+
       const ch = key.toString();
 
       // Ctrl+G = \x07
@@ -134,10 +138,28 @@ async function handleCommand(input, rl) {
     case '/help':
       printHelp();
       return false;
-    case '/config':
-      credentials = await setupCredentials(true);
+    case '/config': {
+      // Pause raw mode so readline works normally for config prompts
+      inputPaused = true;
+      if (process.stdin.isTTY && process.stdin.isRaw) {
+        process.stdin.setRawMode(false);
+      }
+
+      const askFn = (prompt) => new Promise((resolve) => {
+        rl.question(prompt, (answer) => resolve(answer));
+      });
+
+      credentials = await setupCredentials(true, askFn);
+
+      // Restore raw mode
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(true);
+      }
+      inputPaused = false;
+
       printInfo(`Now using ${chalk.yellow(credentials.model)} at ${chalk.gray(credentials.baseUrl)}`);
       return false;
+    }
     case '/clear':
       conversationHistory = [{ role: 'system', content: getSystemPrompt() }];
       printInfo('Conversation history cleared.');
