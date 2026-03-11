@@ -1,8 +1,48 @@
 const fetch = require('node-fetch');
 
+/**
+ * Send a chat completion request (non-streaming) with tool support.
+ * Returns the full response JSON.
+ */
+async function chatCompletion(credentials, messages, tools) {
+  const { baseUrl, apiKey, model } = credentials;
+  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+
+  const body = { model, messages };
+  if (tools && tools.length > 0) {
+    body.tools = tools;
+    body.tool_choice = 'auto';
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    let errMsg;
+    try {
+      const parsed = JSON.parse(errBody);
+      errMsg = parsed.error?.message || errBody;
+    } catch {
+      errMsg = errBody;
+    }
+    throw new Error(`API Error (${response.status}): ${errMsg}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Stream a chat completion (no tools). Calls onToken for each streamed token.
+ */
 async function streamChat(credentials, messages, onToken, onDone, onError) {
   const { baseUrl, apiKey, model } = credentials;
-
   const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
   try {
@@ -12,11 +52,7 @@ async function streamChat(credentials, messages, onToken, onDone, onError) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: true,
-      }),
+      body: JSON.stringify({ model, messages, stream: true }),
     });
 
     if (!response.ok) {
@@ -78,4 +114,4 @@ async function streamChat(credentials, messages, onToken, onDone, onError) {
   }
 }
 
-module.exports = { streamChat };
+module.exports = { chatCompletion, streamChat };

@@ -3,8 +3,9 @@
 const readline = require('readline');
 const chalk = require('chalk');
 const ora = require('ora');
-const { setupCredentials, getCredentials } = require('./config');
-const { streamChat } = require('./api');
+const { setupCredentials } = require('./config');
+const { chatCompletion, streamChat } = require('./api');
+const { getSystemPrompt, toolDefinitions, executeTool, printToolCall } = require('./tools');
 const {
   printBanner,
   printHelp,
@@ -25,10 +26,13 @@ let isStreaming = false;
 async function main() {
   printBanner();
 
-  // Setup credentials on first run or if missing
   credentials = await setupCredentials();
 
+  // Inject system prompt with filesystem context
+  conversationHistory.push({ role: 'system', content: getSystemPrompt() });
+
   printInfo(`Connected to ${chalk.yellow(credentials.model)} at ${chalk.gray(credentials.baseUrl)}`);
+  printInfo(`Working directory: ${chalk.yellow(process.cwd())}`);
   console.log(chalk.gray('  Type /help for commands or just start chatting!\n'));
 
   const rl = readline.createInterface({
@@ -48,7 +52,6 @@ async function main() {
       return;
     }
 
-    // Handle slash commands
     if (input.startsWith('/')) {
       await handleCommand(input, rl);
       rl.prompt();
@@ -61,7 +64,6 @@ async function main() {
       return;
     }
 
-    // Send message to API
     await sendMessage(input, rl);
   });
 
@@ -79,32 +81,26 @@ async function handleCommand(input, rl) {
     case '/help':
       printHelp();
       break;
-
     case '/config':
       credentials = await setupCredentials(true);
       printInfo(`Now using ${chalk.yellow(credentials.model)} at ${chalk.gray(credentials.baseUrl)}`);
       break;
-
     case '/clear':
-      conversationHistory = [];
+      conversationHistory = [{ role: 'system', content: getSystemPrompt() }];
       printInfo('Conversation history cleared.');
       break;
-
     case '/history':
-      printHistory(conversationHistory);
+      printHistory(conversationHistory.filter((m) => m.role !== 'system' && m.role !== 'tool'));
       break;
-
     case '/model':
       printModelInfo(credentials);
       break;
-
     case '/exit':
     case '/quit':
       console.log('');
       printInfo('Goodbye! 👋');
       process.exit(0);
       break;
-
     default:
       printError(`Unknown command: ${cmd}. Type /help for available commands.`);
       break;
@@ -119,63 +115,83 @@ async function sendMessage(userInput, rl) {
   isStreaming = true;
   printAssistantHeader();
 
-  const spinner = ora({
-    text: chalk.gray('Thinking...'),
-    indent: 2,
-    spinner: 'dots',
-    color: 'magenta',
-  }).start();
+  try {
+    // Tool-calling loop: keep calling until the model gives a final text response
+    let iterationLimit = 10;
 
-  let firstToken = true;
+    while (iterationLimit-- > 0) {
+      const spinner = ora({
+        text: chalk.gray('Thinking...'),
+        indent: 2,
+        spinner: 'dots',
+        color: 'magenta',
+      }).start();
 
-  await new Promise((resolve) => {
-    streamChat(
-      credentials,
-      conversationHistory,
-      // onToken
-      (token) => {
-        if (firstToken) {
-          spinner.stop();
-          process.stdout.write('  ');
-          firstToken = false;
-        }
-        process.stdout.write(token);
-      },
-      // onDone
-      (fullResponse) => {
-        if (firstToken) {
-          spinner.stop();
-        }
+      const result = await chatCompletion(credentials, conversationHistory, toolDefinitions);
+      const choice = result.choices?.[0];
 
-        // Re-render the full response with markdown formatting
-        process.stdout.write('\r\x1b[K'); // Clear current line
-        // Move cursor up to clear streamed text
-        const lineCount = fullResponse.split('\n').length;
-        for (let i = 0; i < lineCount; i++) {
-          process.stdout.write('\x1b[A\x1b[K');
-        }
-
-        const formatted = formatMarkdown(fullResponse);
-        console.log(formatted.replace(/^/gm, '  '));
-
-        conversationHistory.push({ role: 'assistant', content: fullResponse });
-        printAssistantEnd();
-        isStreaming = false;
-        rl.prompt();
-        resolve();
-      },
-      // onError
-      (errMsg) => {
+      if (!choice) {
         spinner.stop();
-        printError(errMsg);
-        // Remove the failed user message
-        conversationHistory.pop();
-        isStreaming = false;
-        rl.prompt();
-        resolve();
+        printError('No response from model.');
+        break;
       }
-    );
-  });
+
+      const message = choice.message;
+
+      // If the model wants to call tools
+      if (message.tool_calls && message.tool_calls.length > 0) {
+        spinner.stop();
+
+        // Add assistant message with tool_calls to history
+        conversationHistory.push(message);
+
+        // Execute each tool call
+        for (const toolCall of message.tool_calls) {
+          const fnName = toolCall.function.name;
+          let fnArgs;
+          try {
+            fnArgs = JSON.parse(toolCall.function.arguments);
+          } catch {
+            fnArgs = {};
+          }
+
+          printToolCall(fnName, fnArgs);
+
+          const toolResult = executeTool(fnName, fnArgs);
+
+          // Add tool result to history
+          conversationHistory.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(toolResult),
+          });
+        }
+
+        // Continue the loop so the model can process tool results
+        continue;
+      }
+
+      // No tool calls — this is the final text response
+      spinner.stop();
+
+      const content = message.content || '';
+      if (content) {
+        conversationHistory.push({ role: 'assistant', content });
+        const formatted = formatMarkdown(content);
+        console.log(formatted.replace(/^/gm, '  '));
+      }
+
+      break;
+    }
+  } catch (err) {
+    printError(err.message);
+    // Remove the failed user message
+    conversationHistory.pop();
+  }
+
+  printAssistantEnd();
+  isStreaming = false;
+  rl.prompt();
 }
 
 main().catch((err) => {
