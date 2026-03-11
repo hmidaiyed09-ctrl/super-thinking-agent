@@ -1,0 +1,24 @@
+{
+  "name": "super-thinking-agent",
+  "version": "1.0.0",
+  "description": "A powerful AI coding CLI — chat with any LLM right from your terminal.",
+  "main": "src/index.js",
+  "bin": {
+    "sta": "src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": ["cli", "ai", "chatbot", "terminal", "llm"],
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "conf": "^10.2.0",
+    "inquirer": "^8.2.6",
+    "node-fetch": "^2.7.0",
+    "ora": "^5.4.1",
+    "marked": "^4.3.0",
+    "marked-terminal": "^5.2.0",
+    "readline": "^1.3.0"
+  }
+}
