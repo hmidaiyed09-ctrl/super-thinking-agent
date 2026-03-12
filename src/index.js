@@ -30,6 +30,8 @@ let isStreaming = false;
 let pendingChanges = false;
 let thinkingDepth = 0; // 0 = off, 1+ = number of thinking rounds
 let inputPaused = false; // blocks stdin handler during config prompts
+let isCancelled = false; // set by Ctrl+E to abort current response
+let abortController = null; // AbortController for the current API request
 
 async function main() {
   printBanner();
@@ -44,7 +46,7 @@ async function main() {
 
   printInfo(`Connected to ${chalk.yellow(credentials.model)} at ${chalk.gray(credentials.baseUrl)}`);
   printInfo(`Working directory: ${chalk.yellow(process.cwd())}`);
-  console.log(chalk.gray('  Type /help for commands. Press Ctrl+G to commit changes.\n'));
+  console.log(chalk.gray('  Type /help for commands. Ctrl+G to commit, Ctrl+E to cancel response.\n'));
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -73,6 +75,17 @@ async function main() {
           printInfo('No pending changes to commit.');
         }
         rl.prompt();
+        return;
+      }
+
+      // Ctrl+E = \x05 — cancel current response immediately
+      if (ch === '\x05') {
+        if (isStreaming) {
+          isCancelled = true;
+          if (abortController) abortController.abort();
+          console.log('');
+          printInfo('⏹ Response cancelled.');
+        }
         return;
       }
 
@@ -219,18 +232,26 @@ async function runThinkingRounds(userInput) {
     let thinkingSystemPrompt;
 
     if (round === 1) {
-      // ROUND 1: Intent Extraction & Divergent Solution Matrix
-      thinkingSystemPrompt = `you are the ultimate analytical best programmer engine  in deep programming  thinking mode. Your job is to solve any porgramming porblem by thinking deeply and analytically and create a plan to solve it.
-      map the entire problem space,
-      you don't give answers. you just give how answers should looks.
-      by analyse the user goals  and choose the most likely what he means.
-      2-organise your thought determine all the possiblities for the problme or the solution  and getting deeper into every one if it's good or not and adv and disadvanggaes of it
-      and than in the end creates questions that need to be answered to find the best possible answer`;
+      thinkingSystemPrompt = `You are a deep analytical reasoning engine for software engineering. Your job is NOT to give the final answer — your job is to THINK.
+
+Do the following:
+1. **Parse Intent**: What exactly is the user asking for? Consider multiple interpretations and pick the most likely one.
+2. **Map the Problem Space**: Break down the problem into sub-problems. What are the inputs, outputs, constraints, and edge cases?
+3. **Explore Solutions**: List all viable approaches. For each one, analyze: architecture, tech stack choices, pros, cons, complexity, and maintainability.
+4. **Identify the Best Path**: Based on your analysis, which approach is the strongest? Why?
+5. **Generate Clarifying Questions**: What questions, if answered, would lead to an even better solution? (Answer them yourself if possible.)
+
+Output your structured reasoning. Do NOT write code — only analysis and planning.`;
 
     } else {
-      // SUBSEQUENT ROUNDS: Stress-Testing, Simulation, & Convergence
-      thinkingSystemPrompt = `continue your resoning to determine.1- things imporntatn forget to analyse it.things hidden in projects that helps define the probelm-
-      continue deeper in the solution matrix and disadvantage mapping and also continue littelry from where you ends.try to find things buy making questions and answers to yourself and answer them and continue this process until you find the best possible answer/continue deeper in creating more questions that need to be answered to find the best possible answer`;
+      thinkingSystemPrompt = `Continue your deep analysis from the previous round. Focus on:
+1. **Gaps**: What important aspects did you miss or under-analyze?
+2. **Hidden Complexity**: What edge cases, dependencies, or integration challenges exist?
+3. **Stress-Test**: Challenge your chosen approach — what could go wrong? How would you mitigate it?
+4. **Refine the Plan**: Produce a more detailed, step-by-step implementation plan with specific file names, folder structure, and technology choices.
+5. **Self-Q&A**: Ask yourself hard questions and answer them to sharpen the solution.
+
+Continue from exactly where the previous round ended. Go deeper.`;
     }
 
     const thinkingMessages = [
@@ -264,6 +285,7 @@ async function sendMessage(userInput, rl) {
   printUserMessage(userInput);
 
   isStreaming = true;
+  isCancelled = false;
 
   let madeFileChanges = false;
   let changeSummary = [];
@@ -294,10 +316,14 @@ ${thinkingContext}`,
       conversationHistory.push({ role: 'user', content: userInput });
     }
 
-    // Tool-calling loop
-    let iterationLimit = 10;
+    // Tool-calling loop — high limit so the AI can work across many rounds
+    let iterationLimit = 50;
+    let wantsContinue = false;
 
     while (iterationLimit-- > 0) {
+      // Check if user pressed Ctrl+E
+      if (isCancelled) break;
+
       const spinner = ora({
         text: chalk.gray('Thinking...'),
         indent: 2,
@@ -305,7 +331,22 @@ ${thinkingContext}`,
         color: 'magenta',
       }).start();
 
-      const result = await chatCompletion(credentials, conversationHistory, toolDefinitions);
+      abortController = new AbortController();
+      let result;
+      try {
+        result = await chatCompletion(credentials, conversationHistory, toolDefinitions, { signal: abortController.signal });
+      } catch (err) {
+        spinner.stop();
+        if (isCancelled || err.name === 'AbortError') break;
+        throw err;
+      }
+
+      // Check cancellation right after API returns
+      if (isCancelled) {
+        spinner.stop();
+        break;
+      }
+
       const choice = result.choices?.[0];
 
       if (!choice) {
@@ -320,6 +361,8 @@ ${thinkingContext}`,
         spinner.stop();
         conversationHistory.push(message);
 
+        wantsContinue = false;
+
         for (const toolCall of message.tool_calls) {
           const fnName = toolCall.function.name;
           let fnArgs;
@@ -327,6 +370,18 @@ ${thinkingContext}`,
             fnArgs = JSON.parse(toolCall.function.arguments);
           } catch {
             fnArgs = {};
+          }
+
+          // Handle "continue" tool — signals the AI wants to keep working
+          if (fnName === 'continue') {
+            wantsContinue = true;
+            console.log(chalk.gray(`  🔄 `) + chalk.cyan(`Continuing: `) + chalk.gray(fnArgs.reason || '...'));
+            conversationHistory.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({ success: true, message: 'Continue working. Pick up where you left off.' }),
+            });
+            continue;
           }
 
           printToolCall(fnName, fnArgs);
@@ -344,10 +399,16 @@ ${thinkingContext}`,
           });
         }
 
+        // If the AI called "continue", loop back for another round
+        if (wantsContinue) {
+          wantsContinue = false;
+          continue;
+        }
+
         continue;
       }
 
-      // Final text response
+      // The AI gave a final text response
       spinner.stop();
 
       const content = message.content || '';
@@ -359,9 +420,17 @@ ${thinkingContext}`,
 
       break;
     }
+
+    // If cancelled, add a marker to conversation so the AI knows it was stopped
+    if (isCancelled) {
+      printInfo('Response cancelled.');
+      conversationHistory.push({ role: 'assistant', content: '(Response cancelled by user)' });
+    }
   } catch (err) {
-    printError(err.message);
-    conversationHistory.pop();
+    if (!isCancelled) {
+      printError(err.message);
+      conversationHistory.pop();
+    }
   }
 
   // Auto-commit if file changes were made

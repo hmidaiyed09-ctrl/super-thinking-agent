@@ -4,7 +4,7 @@ const fetch = require('node-fetch');
  * Send a chat completion request (non-streaming) with tool support.
  * Returns the full response JSON.
  */
-async function chatCompletion(credentials, messages, tools) {
+async function chatCompletion(credentials, messages, tools, { signal } = {}) {
   const { baseUrl, apiKey, model } = credentials;
   const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
@@ -21,6 +21,7 @@ async function chatCompletion(credentials, messages, tools) {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!response.ok) {
