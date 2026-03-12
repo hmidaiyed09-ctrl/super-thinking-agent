@@ -219,38 +219,18 @@ async function runThinkingRounds(userInput) {
     let thinkingSystemPrompt;
 
     if (round === 1) {
-      // First round: deep analysis
-      thinkingSystemPrompt = `You are in DEEP THINKING MODE. Your job is NOT to answer the user's question yet.
-Instead, deeply analyze the problem:
-- Break it down into sub-problems
-- Consider edge cases, constraints, and potential pitfalls
-- Think about multiple approaches and their trade-offs
-- Identify what information you need
-- Question your own assumptions
-- Think outside the box — consider unconventional approaches
-- If there's code involved, think about architecture, patterns, and potential bugs
+      // ROUND 1: Intent Extraction & Divergent Solution Matrix
+      thinkingSystemPrompt = `you are the ultimate analytical best programmer engine  in deep programming  thinking mode. Your job is to solve any porgramming porblem by thinking deeply and analytically and create a plan to solve it.
+      map the entire problem space,
+      you don't give answers. you just give how answers should looks.
+      by analyse the user goals  and choose the most likely what he means.
+      2-organise your thought determine all the possiblities for the problme or the solution  and getting deeper into every one if it's good or not and adv and disadvanggaes of it
+      and than in the end creates questions that need to be answered to find the best possible answer`;
 
-Be thorough and critical. This is internal reasoning — be raw and honest in your analysis.`;
     } else {
-      // Subsequent rounds: refine previous reasoning
-      thinkingSystemPrompt = `You are in DEEP THINKING MODE (round ${round}/${thinkingDepth}).
-
-Here is your previous reasoning:
----
-${thinkingPrompts.join('\n---\n')}
----
-
-Now go DEEPER:
-- Find flaws or gaps in your previous reasoning
-- Explore approaches you haven't considered
-- Challenge your own assumptions — are they actually true?
-- If you found an approach, mentally test it — does it actually work?
-- Think about what could go wrong
-- Refine and improve your analysis
-- Consider the user's real intent behind the question
-- Think outside the box — would a completely different approach be better?
-
-Build on your previous thinking but push further. Be critical of yourself.`;
+      // SUBSEQUENT ROUNDS: Stress-Testing, Simulation, & Convergence
+      thinkingSystemPrompt = `continue your resoning to determine.1- things imporntatn forget to analyse it.things hidden in projects that helps define the probelm-
+      continue deeper in the solution matrix and disadvantage mapping and also continue littelry from where you ends.try to find things buy making questions and answers to yourself and answer them and continue this process until you find the best possible answer/continue deeper in creating more questions that need to be answered to find the best possible answer`;
     }
 
     const thinkingMessages = [
