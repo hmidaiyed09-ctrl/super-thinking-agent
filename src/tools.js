@@ -70,7 +70,8 @@ On your VERY FIRST response (no matter what the user says, even "hi"), you MUST:
 4. NEVER output placeholder code. Every line must be real, working code.
 5. When reading files, read the FULL file, not just part of it.
 6. For large projects, create files one at a time across multiple tool-call rounds — do not rush everything into one response.
-7. All file changes are auto-committed to git.`;
+7. All file changes are auto-committed to git.
+8. NEVER delete node_modules, package-lock.json, package.json, .git, .gitignore, or the src/ directory. These are critical project files. When asked to "delete unrelated files", only delete files the user explicitly created as test/demo files — NEVER delete infrastructure or dependency files.`;
 }
 
 const toolDefinitions = [
