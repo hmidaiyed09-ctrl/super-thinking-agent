@@ -22,3 +22,10 @@
     "readline": "^1.3.0"
   }
 }
+curl -X POST https://seraphyn.ai/api/v1/chat/completions \
+-H "Authorization: Bearer sk_9P__Gyf0Hq2-Yc5WttmTFlFysmp4IWTg" \
+-H "Content-Type: application/json" \
+-d '{
+  "model": "gpt-4.1",
+  "messages": [{"role": "user", "content": "Hello"}]
+}'

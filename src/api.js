@@ -4,6 +4,15 @@ const fetch = require('node-fetch');
  * Send a chat completion request (non-streaming) with tool support.
  * Returns the full response JSON.
  */
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 2000;
+
+function isRetryable(err) {
+  const msg = (err.message || '').toLowerCase();
+  return msg.includes('econnreset') || msg.includes('etimedout') || msg.includes('socket hang up')
+    || msg.includes('enotfound') || msg.includes('fetch') || err.code === 'ECONNRESET';
+}
+
 async function chatCompletion(credentials, messages, tools, { signal } = {}) {
   const { baseUrl, apiKey, model } = credentials;
   const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
@@ -14,29 +23,41 @@ async function chatCompletion(credentials, messages, tools, { signal } = {}) {
     body.tool_choice = 'auto';
   }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-    signal,
-  });
-
-  if (!response.ok) {
-    const errBody = await response.text();
-    let errMsg;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const parsed = JSON.parse(errBody);
-      errMsg = parsed.error?.message || errBody;
-    } catch {
-      errMsg = errBody;
-    }
-    throw new Error(`API Error (${response.status}): ${errMsg}`);
-  }
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal,
+      });
 
-  return response.json();
+      if (!response.ok) {
+        const errBody = await response.text();
+        let errMsg;
+        try {
+          const parsed = JSON.parse(errBody);
+          errMsg = parsed.error?.message || errBody;
+        } catch {
+          errMsg = errBody;
+        }
+        throw new Error(`API Error (${response.status}): ${errMsg}`);
+      }
+
+      return await response.json();
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+      if (isRetryable(err) && attempt < MAX_RETRIES) {
+        const delay = RETRY_DELAY_MS * attempt;
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 /**

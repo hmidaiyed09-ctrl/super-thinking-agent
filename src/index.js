@@ -7,6 +7,7 @@ const { setupCredentials } = require('./config');
 const { chatCompletion } = require('./api');
 const { getSystemPrompt, toolDefinitions, executeTool, printToolCall, isModifyingTool } = require('./tools');
 const { gitInit, autoCommit, printCommit } = require('./git');
+const { runAssemblyLine } = require('./assembly-line');
 const {
   printBanner,
   printHelp,
@@ -29,6 +30,7 @@ let credentials = null;
 let isStreaming = false;
 let pendingChanges = false;
 let thinkingDepth = 0; // 0 = off, 1+ = number of thinking rounds
+let factoryMode = false; // assembly line mode (Maker/Breaker/3-strikes)
 let inputPaused = false; // blocks stdin handler during config prompts
 let isCancelled = false; // set by Ctrl+E to abort current response
 let abortController = null; // AbortController for the current API request
@@ -199,6 +201,21 @@ async function handleCommand(input, rl) {
       }
       return false;
     }
+    case '/factory': {
+      factoryMode = !factoryMode;
+      if (factoryMode) {
+        printInfo(chalk.yellow('🏭 Factory Assembly Line mode ON') + chalk.white(' — Rubric → Maker → Breaker → 3-Strike Rule'));
+      } else {
+        printInfo(chalk.gray('🏭 Factory Assembly Line mode OFF') + chalk.white(' — back to normal mode'));
+      }
+      // If there's inline text, send it immediately in factory mode
+      const factoryMsg = parts.slice(1).join(' ').trim();
+      if (factoryMsg && factoryMode) {
+        await sendMessage(factoryMsg, rl);
+        return true;
+      }
+      return false;
+    }
     case '/commit':
       commitPendingChanges();
       return false;
@@ -291,6 +308,37 @@ async function sendMessage(userInput, rl) {
   let changeSummary = [];
 
   try {
+    // ── Factory Assembly Line Mode ──────────────────────────────
+    if (factoryMode) {
+      printAssistantHeader();
+      printInfo(chalk.yellow('🏭 Running Factory Assembly Line...'));
+
+      const result = await runAssemblyLine(
+        credentials, userInput, conversationHistory, toolDefinitions,
+        executeTool, printToolCall, isModifyingTool
+      );
+
+      if (result.madeFileChanges) {
+        madeFileChanges = true;
+        changeSummary.push(...result.changeSummary);
+      }
+
+      const formatted = formatMarkdown(result.finalResponse);
+      console.log(formatted.replace(/^/gm, '  '));
+      conversationHistory.push({ role: 'user', content: userInput });
+      conversationHistory.push({ role: 'assistant', content: result.finalResponse });
+
+      // Skip the normal flow
+      isStreaming = false;
+      if (madeFileChanges) {
+        pendingChanges = true;
+        printInfo('Changes made. Press Ctrl+G to commit.');
+      }
+      printAssistantEnd();
+      rl.prompt();
+      return;
+    }
+
     // If thinking is enabled, run thinking rounds first
     let thinkingContext = '';
     if (thinkingDepth > 0) {
@@ -433,16 +481,10 @@ ${thinkingContext}`,
     }
   }
 
-  // Auto-commit if file changes were made
+  // Mark pending changes for manual commit via Ctrl+G
   if (madeFileChanges) {
-    const commitMsg = `Agent: ${changeSummary.join(', ')}`;
-    const hash = autoCommit(commitMsg);
-    if (hash) {
-      printCommit(hash, commitMsg);
-      pendingChanges = false;
-    } else {
-      pendingChanges = true;
-    }
+    pendingChanges = true;
+    printInfo('Changes made. Press Ctrl+G to commit.');
   }
 
   printAssistantEnd();

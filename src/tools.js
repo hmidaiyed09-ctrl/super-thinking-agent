@@ -220,22 +220,39 @@ function resolvePath(p) {
   return path.resolve(cwd, p);
 }
 
+function getPath(args) {
+  return args.file_path || args.path || args.filePath || args.filename || args.file;
+}
+
 function executeTool(name, args) {
   switch (name) {
     case 'list_files':
-      return listFiles(args.dir_path);
-    case 'read_file':
-      return readFile(args.file_path);
-    case 'create_file':
-      return createFile(args.file_path, args.content);
-    case 'edit_file':
-      return editFile(args.file_path, args.old_text, args.new_text);
-    case 'delete_file':
-      return deleteFile(args.file_path);
+      return listFiles(args.dir_path || args.path || args.directory || '.');
+    case 'read_file': {
+      const p = getPath(args);
+      if (!p) return { error: 'Missing file_path argument.' };
+      return readFile(p);
+    }
+    case 'create_file': {
+      const p = getPath(args);
+      if (!p) return { error: 'Missing file_path argument.' };
+      if (!args.content && args.content !== '') return { error: 'Missing content argument.' };
+      return createFile(p, args.content);
+    }
+    case 'edit_file': {
+      const p = getPath(args);
+      if (!p) return { error: 'Missing file_path argument.' };
+      return editFile(p, args.old_text, args.new_text);
+    }
+    case 'delete_file': {
+      const p = getPath(args);
+      if (!p) return { error: 'Missing file_path argument.' };
+      return deleteFile(p);
+    }
     case 'run_command':
-      return runCommand(args.command);
+      return runCommand(args.command || args.cmd || '');
     case 'continue':
-      return { success: true, message: `Continuing: ${args.reason}` };
+      return { success: true, message: `Continuing: ${args.reason || ''}` };
     default:
       return { error: `Unknown tool: ${name}` };
   }

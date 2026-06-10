@@ -36,6 +36,8 @@ function printHelp() {
   console.log(chalk.yellow('  /history     ') + chalk.white(' Show conversation history'));
   console.log(chalk.yellow('  /model       ') + chalk.white(' Show current model info'));
   console.log(chalk.yellow('  /thinking N  ') + chalk.white(' Set thinking depth (e.g. /thinking 3)'));
+  console.log(chalk.yellow('  /factory     ') + chalk.white(' Toggle Factory Assembly Line mode'));
+  console.log(chalk.yellow('               ') + chalk.gray(' (Rubric → Maker → Breaker → 3-Strike Rule)'));
   console.log(chalk.yellow('  /commit      ') + chalk.white(' Manually commit pending changes'));
   console.log(chalk.yellow('  /exit        ') + chalk.white(' Exit the CLI'));
   console.log('');
